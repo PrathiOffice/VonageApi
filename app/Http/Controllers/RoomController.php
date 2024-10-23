@@ -27,6 +27,7 @@ class RoomController extends Controller
         // Validate request
         $request->validate([
             'room_name' => 'sometimes|string|max:255', // Make room_name optional
+            'role' => 'required|in:publisher,subscriber' // Validate role
         ]);
     
         // Log the incoming request for debugging
@@ -43,19 +44,25 @@ class RoomController extends Controller
                     'name' => $roomName,
                     'session_id' => $sessionId,
                 ]);
+                Log::info("Created new room: $roomName with session ID: $sessionId");
             } catch (OpenTokException $e) {
+                Log::error('Failed to create session: ' . $e->getMessage());
                 return response()->json(['error' => 'Failed to create session: ' . $e->getMessage()], 500);
             }
+        } else {
+            Log::info("Joined existing room: $roomName with session ID: " . $room->session_id);
         }
     
-        // Generate a token for the session
+        // Generate a token for the session based on the role
         try {
+            $role = $request->input('role') === 'publisher' ? \OpenTok\Role::PUBLISHER : \OpenTok\Role::SUBSCRIBER;
             $token = $this->opentok->generateToken($room->session_id, [
-                'role' => \OpenTok\Role::PUBLISHER,  // PUBLISHER or SUBSCRIBER
+                'role' => $role,  // PUBLISHER or SUBSCRIBER
                 'expireTime' => time() + 3600,       // 1 hour token expiry
                 'data' => 'username=Guest'           // Optional metadata
             ]);
         } catch (OpenTokException $e) {
+            Log::error('Failed to generate token: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to generate token: ' . $e->getMessage()], 500);
         }
     
